@@ -10,7 +10,7 @@ const csv = require('./lib/csv');
 const V = require('./views');
 
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); // required for secure session cookies behind hosting proxies (Railway, Render, etc.)
 const PORT = process.env.PORT || 3000;
 
 app.disable('x-powered-by');
@@ -144,7 +144,7 @@ app.post('/invitation/respond', requireInvite, (req, res) => {
     clean(req.body.parent_phone, 40),
     clean(req.body.parent_email, 160),
     ['Yes', 'No'].includes(req.body.camp_rsvp) ? req.body.camp_rsvp : '',
-    clean(req.body.camp_days, 60),
+    decision === 'Accepted' ? 'All three days (Aug 6\u20138)' : '',
     clean(req.body.jersey_size, 20),
     clean(req.body.shorts_size, 20),
     clean(req.body.shoe_size, 30),
