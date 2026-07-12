@@ -9,6 +9,44 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// Converts whatever link is pasted into VIDEO_URL (YouTube watch/share/Shorts,
+// Vimeo, or an already-embeddable URL) into an iframe-safe embed URL.
+// Returns '' when no video is configured -> the placeholder shows instead.
+function videoEmbedUrl() {
+  const raw = String(process.env.VIDEO_URL || '').trim();
+  if (!raw) return '';
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return '';
+  }
+  if (!/^https?:$/.test(u.protocol)) return '';
+  const host = u.hostname.replace(/^www\./, '');
+  const idOk = (s) => /^[\w-]{5,20}$/.test(s);
+
+  // youtu.be/<id>
+  if (host === 'youtu.be') {
+    const id = u.pathname.slice(1).split('/')[0];
+    return idOk(id) ? `https://www.youtube-nocookie.com/embed/${id}` : '';
+  }
+  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+    // /watch?v=<id>
+    const v = u.searchParams.get('v');
+    if (v && idOk(v)) return `https://www.youtube-nocookie.com/embed/${v}`;
+    // /shorts/<id>, /live/<id>, /embed/<id>
+    const m = u.pathname.match(/^\/(shorts|live|embed)\/([\w-]{5,20})/);
+    if (m) return `https://www.youtube-nocookie.com/embed/${m[2]}`;
+    return '';
+  }
+  if (host === 'vimeo.com') {
+    const m = u.pathname.match(/^\/(\d{6,12})/);
+    return m ? `https://player.vimeo.com/video/${m[1]}` : '';
+  }
+  if (host === 'player.vimeo.com') return raw;
+  return '';
+}
+
 const LOGO = `
 <a href="/invite" class="brand" aria-label="Workshop HQ home">
   <img src="/badge-small.png" width="46" height="46" alt="">
@@ -53,22 +91,24 @@ ${body}
 function invitePage({ error = '', values = {} } = {}) {
   const body = `
 <main class="gate">
-  <div class="narrow gate-card gate-center">
-    <div class="gate-badge">${badge(200)}</div>
-    <p class="eyebrow">Workshop HQ &middot; By Marcus &amp; Malik Monk</p>
-    <h1 class="display one-line">You&rsquo;ve Been Invited.</h1>
-    <div class="blade" aria-hidden="true"></div>
-    <p class="sub">Enter the player&rsquo;s name and invitation code to continue.</p>
-    ${error ? `<div class="error-box" role="alert">${esc(error)}</div>` : ''}
-    <form method="post" action="/invite/verify" autocomplete="off">
-      <label for="first_name">Player first name</label>
-      <input type="text" id="first_name" name="first_name" required value="${esc(values.first_name || '')}">
-      <label for="last_name">Player last name</label>
-      <input type="text" id="last_name" name="last_name" required value="${esc(values.last_name || '')}">
-      <label for="code">Invitation code</label>
-      <input type="text" id="code" name="code" required placeholder="WHQ-XXXX-XXXX" value="${esc(values.code || '')}" style="text-transform:uppercase">
-      <button class="btn block" type="submit">Continue</button>
-    </form>
+  <div class="narrow gate-card">
+    <div class="card-panel gate-card-panel gate-center">
+      <div class="gate-badge">${badge(190)}</div>
+      <p class="eyebrow">Workshop HQ &middot; By Marcus &amp; Malik Monk</p>
+      <h1 class="display one-line">You&rsquo;ve Been Invited.</h1>
+      <div class="blade" aria-hidden="true"></div>
+      <p class="sub">Enter the player&rsquo;s name and invitation code to continue.</p>
+      ${error ? `<div class="error-box" role="alert">${esc(error)}</div>` : ''}
+      <form method="post" action="/invite/verify" autocomplete="off">
+        <label for="first_name">Player first name</label>
+        <input type="text" id="first_name" name="first_name" required value="${esc(values.first_name || '')}">
+        <label for="last_name">Player last name</label>
+        <input type="text" id="last_name" name="last_name" required value="${esc(values.last_name || '')}">
+        <label for="code">Invitation code</label>
+        <input type="text" id="code" name="code" required placeholder="WHQ-XXXX-XXXX" value="${esc(values.code || '')}" style="text-transform:uppercase">
+        <button class="btn block" type="submit">Continue</button>
+      </form>
+    </div>
   </div>
 </main>`;
   return layout({ title: 'You\u2019ve Been Invited', body });
@@ -106,6 +146,7 @@ function invitationPage(p) {
     <p class="eyebrow">Respond to Your Invitation</p>
     <h2 class="display">Accept or Decline</h2>
     <div class="blade" aria-hidden="true"></div>
+    <div class="card-panel form-card">
     <form method="post" action="/invitation/respond">
       <div class="choice" role="radiogroup" aria-label="Invitation decision">
         <span>
@@ -117,6 +158,7 @@ function invitationPage(p) {
           <label class="opt" for="dec-decline">Decline Invitation</label>
         </span>
       </div>
+      <p class="muted" style="margin-top:14px;font-size:14.5px">Accepting the invitation means the player will attend all three days &mdash; August 6&ndash;8.</p>
 
       <div class="grid2">
         <div>
@@ -139,20 +181,8 @@ function invitationPage(p) {
           <label for="camp_rsvp">Camp RSVP</label>
           <select id="camp_rsvp" name="camp_rsvp">
             <option value="">Select&hellip;</option>
-            <option value="Yes">Yes &mdash; attending camp</option>
+            <option value="Yes">Yes &mdash; attending camp (all three days, Aug 6&ndash;8)</option>
             <option value="No">No &mdash; not attending camp</option>
-          </select>
-        </div>
-        <div>
-          <label for="camp_days">Camp days attending</label>
-          <select id="camp_days" name="camp_days">
-            <option value="">Select&hellip;</option>
-            <option>All three days (Aug 6&ndash;8)</option>
-            <option>Aug 6 &amp; 7</option>
-            <option>Aug 7 &amp; 8</option>
-            <option>Aug 6 only</option>
-            <option>Aug 7 only</option>
-            <option>Aug 8 only</option>
           </select>
         </div>
         <div>
@@ -192,6 +222,7 @@ function invitationPage(p) {
 
       <button class="btn block" type="submit" style="margin-top:28px">Submit Response</button>
     </form>
+    </div>
   </div>
 </section>`;
 
@@ -204,13 +235,21 @@ function invitationPage(p) {
       ${p.grad_year ? `<p class="grad">Class of ${esc(p.grad_year)}</p>` : ''}
       <div class="blade" aria-hidden="true"></div>
 
+      ${videoEmbedUrl() ? `
+      <div class="video-live">
+        <iframe src="${esc(videoEmbedUrl())}" title="A message from Marcus Monk"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+      <p class="muted" style="margin-top:12px;font-size:14px">Please watch the full video from Marcus before responding below.</p>
+      ` : `
       <div class="video-ph" role="img" aria-label="Video message from Marcus Monk — coming soon">
         <div>
           <div class="play" aria-hidden="true"></div>
           <p class="vp-label">A Message From Marcus Monk</p>
           <p class="vp-sub">Watch the full invitation video before responding below.</p>
         </div>
-      </div>
+      </div>`}
     </div>
   </section>
 
