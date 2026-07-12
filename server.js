@@ -91,6 +91,29 @@ app.get('/', (req, res) => res.redirect('/invite'));
 
 app.get('/invite', (req, res) => res.send(V.invitePage()));
 
+// Direct QR-code link: /invite/WHQ-XXXX-XXXX
+// Valid code -> straight to that player's private invitation (name pre-loaded, no typing).
+// The invitation page itself handles the already-responded state.
+app.get('/invite/:code', rateLimit, (req, res) => {
+  const code = String(req.params.code || '').trim().toUpperCase();
+  const match = /^[\w-]{5,30}$/.test(code)
+    ? db.prepare('SELECT * FROM players WHERE UPPER(invitation_code) = ?').get(code)
+    : null;
+  if (!match) {
+    return res.status(200).send(
+      V.invitePage({
+        error:
+          'We couldn\u2019t verify that invitation link. Please check it matches your invite exactly, or enter the player\u2019s name and code below.',
+      })
+    );
+  }
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).send('Something went wrong. Please try again.');
+    req.session.inviteId = match.id;
+    res.redirect('/invitation');
+  });
+});
+
 app.post('/invite/verify', rateLimit, (req, res) => {
   const { first_name, last_name, code } = req.body;
   const match = findInvite(first_name, last_name, code);
@@ -304,6 +327,7 @@ function loadPlayerOr404(req, res) {
 app.get('/admin/players/:id', requireAdmin, (req, res) => {
   const p = loadPlayerOr404(req, res);
   if (!p) return;
+  p.invite_link = `${req.protocol}://${req.get('host')}/invite/${p.invitation_code}`;
   res.send(V.playerDetailPage({ p, flash: req.query.flash || '' }));
 });
 

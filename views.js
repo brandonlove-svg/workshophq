@@ -555,7 +555,8 @@ function playerDetailPage({ p, flash = '' }) {
       <dt>Invite status</dt><dd>${p.invite_status === 'Sent' ? pill('sent', 'Sent') : pill('notsent', 'Not Sent')}</dd>
       <dt>Response status</dt><dd>${statusPill(p)}</dd>
       <dt>Responded at</dt><dd>${esc(p.responded_at) || '—'}</dd>
-      <dt>Invite link</dt><dd>Families verify at <span class="code-chip">/invite</span> with the player&rsquo;s name + code.</dd>
+      <dt>Direct link (QR)</dt><dd><input type="text" readonly value="${esc(p.invite_link || '/invite/' + p.invitation_code)}" onclick="this.select()" style="max-width:460px;font-family:ui-monospace,Menlo,monospace;font-size:13px;padding:8px 10px"></dd>
+      <dt>Manual entry</dt><dd>Families can also verify at <span class="code-chip">/invite</span> with the player&rsquo;s name + code.</dd>
     </dl>
     <div class="inline-actions">
       ${p.invite_status !== 'Sent' ? `<form method="post" action="/admin/players/${p.id}/mark-sent"><button class="btn small" type="submit">Mark invite sent</button></form>` : ''}
